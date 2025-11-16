@@ -35,6 +35,7 @@ class SrsRtcUdpNetwork;
 class ISrsRtcUdpNetwork;
 class ISrsRtcNetwork;
 class SrsRtcTcpNetwork;
+class SrsRtcCascadeNetwork;
 class SrsRtcDummyNetwork;
 class SrsRtcTcpConn;
 class ISrsRtcTcpConn;
@@ -61,6 +62,7 @@ public:
     virtual void set_state(SrsRtcNetworkState state) = 0;
     virtual ISrsRtcNetwork *udp() = 0;
     virtual ISrsRtcNetwork *tcp() = 0;
+    virtual ISrsRtcNetwork *cascade() = 0;
     virtual ISrsRtcNetwork *available() = 0;
     virtual ISrsKbpsDelta *delta() = 0;
 };
@@ -74,6 +76,8 @@ SRS_DECLARE_PRIVATE: // clang-format on
     ISrsRtcNetwork *udp_;
     // Network over TCP
     ISrsRtcNetwork *tcp_;
+    // Network over cascade (server-to-server WebRTC Private TCP)
+    ISrsRtcNetwork *cascade_;
     // Network over dummy
     ISrsRtcNetwork *dummy_;
 
@@ -98,6 +102,7 @@ public:
     // Get the UDP network object.
     ISrsRtcNetwork *udp();
     ISrsRtcNetwork *tcp();
+    ISrsRtcNetwork *cascade();
     // Get an available network.
     ISrsRtcNetwork *available();
 
@@ -307,6 +312,75 @@ public:
 
 public:
     void set_peer_id(const std::string &ip, int port);
+    void dispose();
+};
+
+// The WebRTC over Cascade network (server-to-server WebRTC Private TCP).
+// This network is used for internal server-to-server communication with the
+// WebRTC Private TCP protocol, which combines JSON signaling and WebRTC media
+// transport over a single TCP connection.
+class SrsRtcCascadeNetwork : public ISrsRtcNetwork
+{
+// clang-format off
+SRS_DECLARE_PRIVATE: // clang-format on
+    ISrsRtcConnection *conn_;
+    ISrsEphemeralDelta *delta_;
+    ISrsProtocolReadWriter *skt_;
+
+// clang-format off
+SRS_DECLARE_PRIVATE: // clang-format on
+    // The DTLS transport over this network.
+    ISrsRtcTransport *transport_;
+    SrsRtcNetworkState state_;
+
+public:
+    SrsRtcCascadeNetwork(ISrsRtcConnection *conn, ISrsEphemeralDelta *delta);
+    virtual ~SrsRtcCascadeNetwork();
+
+public:
+    // Set the socket (called by SrsRtcCascadeConn after session creation)
+    void set_socket(ISrsProtocolReadWriter *skt);
+
+    // ISrsRtcNetwork interface
+public:
+    // Callback when DTLS connected.
+    virtual srs_error_t on_dtls_handshake_done();
+    // Callback when DTLS disconnected.
+    virtual srs_error_t on_dtls_alert(std::string type, std::string desc);
+    // Protect RTP packet by SRTP context (no-op for cascade - plaintext).
+    virtual srs_error_t protect_rtp(void *packet, int *nb_cipher);
+    // Protect RTCP packet by SRTP context (no-op for cascade - plaintext).
+    virtual srs_error_t protect_rtcp(void *packet, int *nb_cipher);
+
+    // When got STUN ping message.
+    srs_error_t on_stun(SrsStunPacket *r, char *data, int nb_data);
+
+// clang-format off
+SRS_DECLARE_PRIVATE: // clang-format on
+    srs_error_t on_binding_request(SrsStunPacket *r, std::string ice_pwd);
+
+    // DTLS transport functions.
+public:
+    // Initialize cascade network - always uses dtls=true, srtp=false internally
+    srs_error_t initialize(SrsSessionConfig *cfg, bool dtls, bool srtp);
+    virtual srs_error_t on_dtls(char *data, int nb_data);
+
+    // When got data from socket.
+public:
+    srs_error_t on_rtcp(char *data, int nb_data);
+    srs_error_t on_rtp(char *data, int nb_data);
+
+    // Other functions.
+public:
+    // Connection level state machine.
+    void set_state(SrsRtcNetworkState state);
+    virtual bool is_establelished();
+
+    // Interface ISrsStreamWriter.
+public:
+    virtual srs_error_t write(void *buf, size_t size, ssize_t *nwrite);
+
+public:
     void dispose();
 };
 

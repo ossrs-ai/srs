@@ -159,6 +159,7 @@ public:
     virtual srs_error_t on_binding_request(SrsStunPacket *r, std::string &ice_pwd);
     virtual ISrsRtcNetwork *udp();
     virtual ISrsRtcNetwork *tcp();
+    virtual ISrsRtcNetwork *cascade();
     virtual void alive();
     virtual bool is_alive();
     virtual bool is_disposing();
@@ -420,6 +421,7 @@ public:
     virtual srs_error_t on_binding_request(SrsStunPacket *r, std::string &ice_pwd);
     virtual ISrsRtcNetwork *udp();
     virtual ISrsRtcNetwork *tcp();
+    virtual ISrsRtcNetwork *cascade();
     virtual void alive();
     virtual bool is_alive();
     virtual bool is_disposing();
@@ -742,6 +744,7 @@ public:
     virtual srs_error_t on_binding_request(SrsStunPacket *r, std::string &ice_pwd);
     virtual ISrsRtcNetwork *udp();
     virtual ISrsRtcNetwork *tcp();
+    virtual ISrsRtcNetwork *cascade();
     virtual void alive();
     virtual bool is_alive();
     virtual bool is_disposing();

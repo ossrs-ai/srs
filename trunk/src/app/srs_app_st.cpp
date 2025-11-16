@@ -379,8 +379,9 @@ void SrsExecutorCoroutine::set_cid(const SrsContextId &cid)
 srs_error_t SrsExecutorCoroutine::cycle()
 {
     srs_error_t err = handler_->cycle();
-    if (callback_)
+    if (callback_) {
         callback_->on_executor_done(this);
+    }
     manager_->remove(this);
     return err;
 }

@@ -2544,6 +2544,11 @@ ISrsRtcNetwork *MockRtcConnectionForUpdateSessions::tcp()
     return NULL;
 }
 
+ISrsRtcNetwork *MockRtcConnectionForUpdateSessions::cascade()
+{
+    return NULL;
+}
+
 void MockRtcConnectionForUpdateSessions::alive()
 {
     alive_called_ = true;

@@ -1962,7 +1962,7 @@ srs_error_t SrsConfig::check_normal_config()
         SrsConfDirective *conf = root_->get("rtc_server");
         for (int i = 0; conf && i < (int)conf->directives_.size(); i++) {
             string n = conf->at(i)->name_;
-            if (n != "enabled" && n != "listen" && n != "dir" && n != "candidate" && n != "ecdsa" && n != "tcp" && n != "encrypt" && n != "reuseport" && n != "merge_nalus" && n != "black_hole" && n != "protocol" && n != "ip_family" && n != "api_as_candidates" && n != "resolve_api_domain" && n != "keep_api_domain" && n != "use_auto_detect_network_ip") {
+            if (n != "enabled" && n != "listen" && n != "dir" && n != "candidate" && n != "ecdsa" && n != "tcp" && n != "encrypt" && n != "reuseport" && n != "merge_nalus" && n != "black_hole" && n != "protocol" && n != "ip_family" && n != "api_as_candidates" && n != "resolve_api_domain" && n != "keep_api_domain" && n != "use_auto_detect_network_ip" && n != "private_tcp") {
                 return srs_error_new(ERROR_SYSTEM_CONFIG_INVALID, "illegal rtc_server.%s", n.c_str());
             }
         }
@@ -2144,6 +2144,16 @@ srs_error_t SrsConfig::check_normal_config()
             for (int i = 0; i < (int)rtc_tcp_listens.size(); i++) {
                 if (!srs_net_is_valid_endpoint(rtc_tcp_listens[i])) {
                     return srs_error_new(ERROR_SYSTEM_CONFIG_INVALID, "rtc_server.tcp.listen=%s is invalid", rtc_tcp_listens[i].c_str());
+                }
+            }
+        }
+
+        // Validate RTC server Private TCP listen addresses
+        if (get_rtc_server_private_tcp_enabled()) {
+            vector<string> rtc_private_tcp_listens = get_rtc_server_private_tcp_listens();
+            for (int i = 0; i < (int)rtc_private_tcp_listens.size(); i++) {
+                if (!srs_net_is_valid_endpoint(rtc_private_tcp_listens[i])) {
+                    return srs_error_new(ERROR_SYSTEM_CONFIG_INVALID, "rtc_server.private_tcp.listen=%s is invalid", rtc_private_tcp_listens[i].c_str());
                 }
             }
         }
@@ -3508,6 +3518,70 @@ vector<string> SrsConfig::get_rtc_server_tcp_listens()
     }
 
     conf = conf->get("tcp");
+    if (!conf) {
+        listens.push_back(DEFAULT);
+        return listens;
+    }
+
+    conf = conf->get("listen");
+    if (!conf) {
+        listens.push_back(DEFAULT);
+        return listens;
+    }
+
+    for (int i = 0; i < (int)conf->args_.size(); i++) {
+        listens.push_back(conf->args_.at(i));
+    }
+
+    // If no arguments, use default
+    if (listens.empty()) {
+        listens.push_back(DEFAULT);
+    }
+
+    return listens;
+}
+
+bool SrsConfig::get_rtc_server_private_tcp_enabled()
+{
+    SRS_OVERWRITE_BY_ENV_BOOL("srs.rtc_server.private_tcp.enabled"); // SRS_RTC_SERVER_PRIVATE_TCP_ENABLED
+
+    static bool DEFAULT = false;
+
+    SrsConfDirective *conf = root_->get("rtc_server");
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    conf = conf->get("private_tcp");
+    if (!conf) {
+        return DEFAULT;
+    }
+
+    conf = conf->get("enabled");
+    if (!conf || conf->arg0().empty()) {
+        return DEFAULT;
+    }
+
+    return SRS_CONF_PREFER_FALSE(conf->arg0());
+}
+
+vector<string> SrsConfig::get_rtc_server_private_tcp_listens()
+{
+    std::vector<string> listens;
+
+    if (!srs_getenv("srs.rtc_server.private_tcp.listen").empty()) { // SRS_RTC_SERVER_PRIVATE_TCP_LISTEN
+        return srs_strings_split(srs_getenv("srs.rtc_server.private_tcp.listen"), " ");
+    }
+
+    static string DEFAULT = "9999";
+
+    SrsConfDirective *conf = root_->get("rtc_server");
+    if (!conf) {
+        listens.push_back(DEFAULT);
+        return listens;
+    }
+
+    conf = conf->get("private_tcp");
     if (!conf) {
         listens.push_back(DEFAULT);
         return listens;

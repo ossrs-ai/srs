@@ -50,6 +50,7 @@ SrsRtcNetworks::SrsRtcNetworks(ISrsRtcConnection *conn)
     delta_ = new SrsEphemeralDelta();
     udp_ = new SrsRtcUdpNetwork(conn_, delta_);
     tcp_ = new SrsRtcTcpNetwork(conn_, delta_);
+    cascade_ = new SrsRtcCascadeNetwork(conn_, delta_);
     dummy_ = new SrsRtcDummyNetwork();
 }
 
@@ -57,6 +58,7 @@ SrsRtcNetworks::~SrsRtcNetworks()
 {
     srs_freep(udp_);
     srs_freep(tcp_);
+    srs_freep(cascade_);
     srs_freep(dummy_);
     srs_freep(delta_);
 }
@@ -73,6 +75,11 @@ srs_error_t SrsRtcNetworks::initialize(SrsSessionConfig *cfg, bool dtls, bool sr
         return srs_error_wrap(err, "tcp init");
     }
 
+    // Initialize cascade - it ignores dtls/srtp params and always uses dtls=true, srtp=false
+    if ((err = cascade_->initialize(cfg, dtls, srtp)) != srs_success) {
+        return srs_error_wrap(err, "cascade init");
+    }
+
     return err;
 }
 
@@ -80,6 +87,7 @@ void SrsRtcNetworks::set_state(SrsRtcNetworkState state)
 {
     udp_->set_state(state);
     tcp_->set_state(state);
+    cascade_->set_state(state);
 }
 
 ISrsRtcNetwork *SrsRtcNetworks::udp()
@@ -92,8 +100,18 @@ ISrsRtcNetwork *SrsRtcNetworks::tcp()
     return tcp_;
 }
 
+ISrsRtcNetwork *SrsRtcNetworks::cascade()
+{
+    return cascade_;
+}
+
 ISrsRtcNetwork *SrsRtcNetworks::available()
 {
+    // Cascade has highest priority - server-to-server connection
+    if (cascade_->is_establelished()) {
+        return cascade_;
+    }
+
     if (udp_->is_establelished()) {
         return udp_;
     }
@@ -101,6 +119,7 @@ ISrsRtcNetwork *SrsRtcNetworks::available()
     if (tcp_->is_establelished()) {
         return tcp_;
     }
+
     return dummy_;
 }
 
@@ -1037,4 +1056,182 @@ srs_error_t SrsRtcTcpConn::on_tcp_pkt(char *pkt, int nb_pkt)
     }
 
     return srs_error_new(ERROR_RTC_UDP, "unknown packet");
+}
+
+SrsRtcCascadeNetwork::SrsRtcCascadeNetwork(ISrsRtcConnection *conn, ISrsEphemeralDelta *delta)
+{
+    conn_ = conn;
+    delta_ = delta;
+    skt_ = NULL;
+    transport_ = NULL;
+    state_ = SrsRtcNetworkStateInit;
+}
+
+SrsRtcCascadeNetwork::~SrsRtcCascadeNetwork()
+{
+    srs_freep(transport_);
+}
+
+void SrsRtcCascadeNetwork::set_socket(ISrsProtocolReadWriter *skt)
+{
+    skt_ = skt;
+}
+
+srs_error_t SrsRtcCascadeNetwork::initialize(SrsSessionConfig *cfg, bool dtls, bool srtp)
+{
+    srs_error_t err = srs_success;
+
+    // Cascade always uses DTLS without SRTP (plaintext RTP/RTCP)
+    // Ignore the dtls/srtp parameters passed in
+    srs_freep(transport_);
+    transport_ = new SrsSemiSecurityTransport(this);
+
+    if ((err = transport_->initialize(cfg)) != srs_success) {
+        return srs_error_wrap(err, "init cascade transport");
+    }
+
+    return err;
+}
+
+srs_error_t SrsRtcCascadeNetwork::on_dtls_handshake_done()
+{
+    srs_error_t err = srs_success;
+
+    // If DTLS done packet received many times, such as ARQ, ignore.
+    if (SrsRtcNetworkStateEstablished == state_) {
+        return err;
+    }
+
+    if ((err = conn_->on_dtls_handshake_done()) != srs_success) {
+        return srs_error_wrap(err, "cascade");
+    }
+
+    state_ = SrsRtcNetworkStateEstablished;
+
+    return err;
+}
+
+srs_error_t SrsRtcCascadeNetwork::on_dtls_alert(std::string type, std::string desc)
+{
+    return conn_->on_dtls_alert(type, desc);
+}
+
+srs_error_t SrsRtcCascadeNetwork::protect_rtp(void *packet, int *nb_cipher)
+{
+    // Cascade uses plaintext RTP - no SRTP protection
+    return srs_success;
+}
+
+srs_error_t SrsRtcCascadeNetwork::protect_rtcp(void *packet, int *nb_cipher)
+{
+    // Cascade uses plaintext RTCP - no SRTCP protection
+    return srs_success;
+}
+
+srs_error_t SrsRtcCascadeNetwork::on_stun(SrsStunPacket *r, char *data, int nb_data)
+{
+    srs_error_t err = srs_success;
+
+    if (!r->is_binding_request()) {
+        return err;
+    }
+
+    std::string ice_pwd;
+    if ((err = conn_->on_binding_request(r, ice_pwd)) != srs_success) {
+        return srs_error_wrap(err, "cascade");
+    }
+
+    if ((err = on_binding_request(r, ice_pwd)) != srs_success) {
+        return srs_error_wrap(err, "stun binding request failed");
+    }
+
+    return err;
+}
+
+srs_error_t SrsRtcCascadeNetwork::on_binding_request(SrsStunPacket *r, std::string ice_pwd)
+{
+    srs_error_t err = srs_success;
+
+    SrsStunPacket stun_binding_response;
+    char buf[kRtpPacketSize];
+    SrsUniquePtr<SrsBuffer> stream(new SrsBuffer(buf, sizeof(buf)));
+
+    stun_binding_response.set_message_type(BindingResponse);
+    stun_binding_response.set_local_ufrag(r->get_remote_ufrag());
+    stun_binding_response.set_remote_ufrag(r->get_local_ufrag());
+    stun_binding_response.set_transcation_id(r->get_transcation_id());
+    // For cascade, we don't need mapped address since it's server-to-server
+    // But we still send it for protocol compatibility
+    stun_binding_response.set_mapped_address(0);
+    stun_binding_response.set_mapped_port(0);
+
+    if ((err = stun_binding_response.encode(ice_pwd, stream.get())) != srs_success) {
+        return srs_error_wrap(err, "stun binding response encode failed");
+    }
+
+    if ((err = write(stream->data(), stream->pos(), NULL)) != srs_success) {
+        return srs_error_wrap(err, "stun binding response send failed");
+    }
+
+    state_ = SrsRtcNetworkStateDtls;
+
+    return err;
+}
+
+srs_error_t SrsRtcCascadeNetwork::on_dtls(char *data, int nb_data)
+{
+    srs_error_t err = srs_success;
+
+    if ((err = transport_->on_dtls(data, nb_data)) != srs_success) {
+        return srs_error_wrap(err, "dtls");
+    }
+
+    return err;
+}
+
+srs_error_t SrsRtcCascadeNetwork::on_rtcp(char *data, int nb_data)
+{
+    srs_error_t err = srs_success;
+
+    // Cascade uses plaintext RTCP - no unprotect needed
+    if ((err = conn_->on_rtcp(data, nb_data)) != srs_success) {
+        return srs_error_wrap(err, "rtcp");
+    }
+
+    return err;
+}
+
+srs_error_t SrsRtcCascadeNetwork::on_rtp(char *data, int nb_data)
+{
+    srs_error_t err = srs_success;
+
+    // Update stat when we received data.
+    delta_->add_delta(nb_data, 0);
+
+    // Cascade uses plaintext RTP - call on_rtp_plaintext directly
+    if ((err = conn_->on_rtp_plaintext(data, nb_data)) != srs_success) {
+        return srs_error_wrap(err, "rtp plaintext");
+    }
+
+    return err;
+}
+
+void SrsRtcCascadeNetwork::set_state(SrsRtcNetworkState state)
+{
+    state_ = state;
+}
+
+bool SrsRtcCascadeNetwork::is_establelished()
+{
+    return state_ == SrsRtcNetworkStateEstablished;
+}
+
+srs_error_t SrsRtcCascadeNetwork::write(void *buf, size_t size, ssize_t *nwrite)
+{
+    return skt_->write(buf, size, nwrite);
+}
+
+void SrsRtcCascadeNetwork::dispose()
+{
+    skt_ = NULL;
 }

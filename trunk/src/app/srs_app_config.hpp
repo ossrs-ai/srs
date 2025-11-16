@@ -352,6 +352,8 @@ public:
     virtual bool get_rtc_server_enabled() = 0;
     virtual bool get_rtc_server_tcp_enabled() = 0;
     virtual std::vector<std::string> get_rtc_server_tcp_listens() = 0;
+    virtual bool get_rtc_server_private_tcp_enabled() = 0;
+    virtual std::vector<std::string> get_rtc_server_private_tcp_listens() = 0;
     virtual std::string get_rtc_server_protocol() = 0;
     virtual std::vector<std::string> get_rtc_server_listens() = 0;
     virtual int get_rtc_server_reuseport() = 0;
@@ -878,6 +880,9 @@ public:
     virtual bool get_rtc_server_tcp_enabled();
     // Get the rtc server tcp listen addresses, support IPv4 and IPv6.
     virtual std::vector<std::string> get_rtc_server_tcp_listens();
+    virtual bool get_rtc_server_private_tcp_enabled();
+    // Get the rtc server private tcp listen addresses, support IPv4 and IPv6.
+    virtual std::vector<std::string> get_rtc_server_private_tcp_listens();
     virtual std::string get_rtc_server_protocol();
     virtual std::string get_rtc_server_ip_family();
     virtual bool get_rtc_server_ecdsa();

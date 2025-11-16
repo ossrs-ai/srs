@@ -517,6 +517,8 @@ public:
     virtual bool get_rtsp_enabled(std::string vhost) { return false; }
     virtual bool get_rtc_from_rtmp(std::string vhost) { return rtc_from_rtmp_; }
     virtual bool get_rtsp_from_rtmp(std::string vhost) { return false; }
+    virtual bool get_rtc_server_private_tcp_enabled() { return false; }
+    virtual std::vector<std::string> get_rtc_server_private_tcp_listens() { return std::vector<std::string>(); }
     // ISrsAppConfig methods
     virtual bool get_vhost_http_hooks_enabled(std::string vhost) { return http_hooks_enabled_; }
     virtual SrsConfDirective *get_vhost_on_stop(std::string vhost) { return on_stop_directive_; }

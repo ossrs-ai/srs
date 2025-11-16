@@ -303,7 +303,7 @@ MODULE_FILES=("srs_app_server" "srs_app_rtmp_conn" "srs_app_rtmp_source"
 # Always include SRT app modules
 MODULE_FILES+=("srs_app_srt_server" "srs_app_srt_listener" "srs_app_srt_conn" "srs_app_srt_source")
 MODULE_FILES+=("srs_app_rtc_conn" "srs_app_rtc_dtls" "srs_app_rtc_network"
-    "srs_app_rtc_server" "srs_app_rtc_source" "srs_app_rtc_api")
+    "srs_app_rtc_server" "srs_app_rtc_source" "srs_app_rtc_api" "srs_app_rtc_cascade")
 if [[ $SRS_RTSP == YES ]]; then
     MODULE_FILES+=("srs_app_rtsp_source" "srs_app_rtsp_conn")
 fi

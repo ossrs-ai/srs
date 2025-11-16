@@ -746,6 +746,7 @@ public:
     // Network access.
     virtual ISrsRtcNetwork *udp() = 0;
     virtual ISrsRtcNetwork *tcp() = 0;
+    virtual ISrsRtcNetwork *cascade() = 0;
     // Keep alive.
     virtual void alive() = 0;
     virtual bool is_alive() = 0;
@@ -929,6 +930,7 @@ public:
 public:
     ISrsRtcNetwork *udp();
     ISrsRtcNetwork *tcp();
+    ISrsRtcNetwork *cascade();
 
 public:
     // send rtcp

@@ -32,6 +32,7 @@ using namespace std;
 #include <srs_app_mpegts_udp.hpp>
 #include <srs_app_reload.hpp>
 #include <srs_app_rtc_api.hpp>
+#include <srs_app_rtc_cascade.hpp>
 #include <srs_app_rtc_dtls.hpp>
 #include <srs_app_rtc_network.hpp>
 #include <srs_app_rtc_server.hpp>
@@ -118,7 +119,7 @@ srs_error_t srs_global_initialize()
     // Initialize stream publish token manager
     _srs_stream_publish_tokens = new SrsStreamPublishTokenManager();
 
-    _srs_conn_manager = new SrsResourceManager("RTC", true);
+    _srs_conn_manager = new SrsResourceManager("CONN", true);
     _srs_rtc_dtls_certificate = new SrsDtlsCertificate();
 #ifdef SRS_RTSP
     _srs_rtsp_sources = new SrsRtspSourceManager();
@@ -209,6 +210,8 @@ SrsServer::SrsServer()
 
     // Initialize WebRTC components
     rtc_session_manager_ = new SrsRtcSessionManager();
+    cascade_manager_ = new SrsRtcCascadeManager(this);
+    cascade_listener_ = new SrsMultipleTcpListeners(cascade_manager_);
 
     config_ = _srs_config;
     live_sources_ = _srs_sources;
@@ -275,6 +278,8 @@ SrsServer::~SrsServer()
         }
         rtc_listeners_.clear();
     }
+    srs_freep(cascade_listener_);
+    srs_freep(cascade_manager_);
 
     srs_freep(rtc_session_manager_);
 
@@ -307,6 +312,7 @@ void SrsServer::dispose()
     http_listener_->close();
     https_listener_->close();
     webrtc_listener_->close();
+    cascade_listener_->close();
 #ifdef SRS_RTSP
     rtsp_listener_->close();
 #endif
@@ -643,6 +649,14 @@ srs_error_t SrsServer::listen()
         webrtc_listener_->add(config_->get_rtc_server_tcp_listens())->set_label("WebRTC");
         if ((err = webrtc_listener_->listen()) != srs_success) {
             return srs_error_wrap(err, "webrtc tcp listen");
+        }
+    }
+
+    // Start WebRTC Private TCP listener for cascade connections.
+    if (config_->get_rtc_server_enabled() && config_->get_rtc_server_private_tcp_enabled()) {
+        cascade_listener_->add(config_->get_rtc_server_private_tcp_listens())->set_label("RTC-Cascade");
+        if ((err = cascade_listener_->listen()) != srs_success) {
+            return srs_error_wrap(err, "rtc cascade listen");
         }
     }
 
@@ -1227,6 +1241,12 @@ void SrsServer::resample_kbps()
         SrsRtcConnection *rtc = dynamic_cast<SrsRtcConnection *>(c);
         if (rtc) {
             stat_->kbps_add_delta(c->get_id().c_str(), rtc->delta());
+            continue;
+        }
+
+        SrsRtcCascadeConn *cascade = dynamic_cast<SrsRtcCascadeConn *>(c);
+        if (cascade) {
+            stat_->kbps_add_delta(c->get_id().c_str(), cascade->delta());
             continue;
         }
 

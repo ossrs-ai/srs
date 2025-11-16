@@ -55,6 +55,7 @@ class SrsRtmpsTransport;
 class SrsSrtAcceptor;
 class SrsSrtEventLoop;
 class SrsRtcSessionManager;
+class SrsRtcCascadeManager;
 class SrsPidFileLocker;
 class ISrsAppConfig;
 class ISrsLiveSourceManager;
@@ -208,6 +209,10 @@ SRS_DECLARE_PRIVATE: // clang-format on
         rtc_listeners_;
     // WebRTC session manager.
     SrsRtcSessionManager *rtc_session_manager_;
+    // WebRTC Private TCP listener for cascade connections.
+    SrsMultipleTcpListeners *cascade_listener_;
+    // WebRTC Private TCP cascade manager.
+    SrsRtcCascadeManager *cascade_manager_;
 
 // clang-format off
 SRS_DECLARE_PRIVATE: // clang-format on

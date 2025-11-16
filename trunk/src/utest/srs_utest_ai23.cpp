@@ -1502,6 +1502,11 @@ ISrsRtcNetwork *MockRtcConnectionForTcpConn::tcp()
     return NULL;
 }
 
+ISrsRtcNetwork *MockRtcConnectionForTcpConn::cascade()
+{
+    return NULL;
+}
+
 void MockRtcConnectionForTcpConn::alive()
 {
 }
@@ -2676,6 +2681,11 @@ ISrsRtcNetwork *MockRtcConnectionForUdpNetwork::tcp()
     return NULL;
 }
 
+ISrsRtcNetwork *MockRtcConnectionForUdpNetwork::cascade()
+{
+    return NULL;
+}
+
 void MockRtcConnectionForUdpNetwork::alive()
 {
 }
@@ -3814,6 +3824,11 @@ ISrsRtcNetwork *MockRtcConnectionForTcpConnHandshake::udp()
 ISrsRtcNetwork *MockRtcConnectionForTcpConnHandshake::tcp()
 {
     return tcp_network_;
+}
+
+ISrsRtcNetwork *MockRtcConnectionForTcpConnHandshake::cascade()
+{
+    return NULL;
 }
 
 void MockRtcConnectionForTcpConnHandshake::alive()
